@@ -6,8 +6,11 @@ import org.junit.Before;
 import org.junit.Test;
 import org.wso2.siddhi.core.ExecutionPlanRuntime;
 import org.wso2.siddhi.core.SiddhiManager;
+import org.wso2.siddhi.core.event.Event;
+import org.wso2.siddhi.core.query.output.callback.QueryCallback;
 import org.wso2.siddhi.core.stream.input.InputHandler;
 import org.wso2.siddhi.core.stream.output.StreamCallback;
+import org.wso2.siddhi.core.util.EventPrinter;
 
 public class CustomWindowExtensionTestCase {
     static final Logger log = Logger.getLogger(CustomWindowExtension.class);
@@ -29,9 +32,9 @@ public class CustomWindowExtensionTestCase {
 
         String inStreamDefinition = "define stream inputStream (meta_punctuation int, id int);";
         String query = ("@info(name = 'query1') " +
-                "from inputStream#window.custom:customWindow(10, meta_punctuation) " +
-                "select count(id) as num_count " +
-                "insert into outputStream;");
+                "from inputStream#window.custom:customWindow(5, meta_punctuation) " +
+                "select sum(id) as sum " +
+                "insert events into outputStream;");
 
         ExecutionPlanRuntime executionPlanRuntime = siddhiManager.createExecutionPlanRuntime(inStreamDefinition + query);
 
@@ -41,7 +44,7 @@ public class CustomWindowExtensionTestCase {
             public void receive(org.wso2.siddhi.core.event.Event[] events) {
                 for (org.wso2.siddhi.core.event.Event event : events) {
                     count++;
-//                    System.out.println("Event : " + event.toString());
+                    System.out.println("Event : " + event.toString());
 //                    if (count == 1) {
 //                        Assert.assertEquals(1l, event.getData()[0]);
 //                    }
@@ -51,16 +54,28 @@ public class CustomWindowExtensionTestCase {
         });
 
 
+//        executionPlanRuntime.addCallback("query1", new QueryCallback() {
+//            @Override
+//            public void receive(long timeStamp, Event[] inEvents, Event[] removeEvents) {
+//                EventPrinter.print(timeStamp, inEvents, removeEvents);
+//            }
+//        });
+
+
         InputHandler inputHandler = executionPlanRuntime.getInputHandler("inputStream");
         executionPlanRuntime.start();
 
-        for (int i = 0; i < 15; i++) {
-            inputHandler.send(new Object[]{ i * 10, i});
-            Thread.sleep(10);
+        for (int i = 0; i < 10; i++) {
+            inputHandler.send(new Object[]{1, 1});
+            Thread.sleep(100);
+        }
+        for (int i = 10; i < 15; i++) {
+            inputHandler.send(new Object[]{-1, 1});
+            Thread.sleep(100);
         }
         executionPlanRuntime.shutdown();
 
-        Thread.sleep(1000);
+        Thread.sleep(2000);
         Assert.assertEquals(15, count);
 
     }

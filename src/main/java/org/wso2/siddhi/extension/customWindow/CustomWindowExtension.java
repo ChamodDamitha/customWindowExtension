@@ -60,19 +60,31 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
     @Override
     protected synchronized void process(ComplexEventChunk<StreamEvent> streamEventChunk,
                                         Processor nextProcessor, StreamEventCloner streamEventCloner) {
+
         while (streamEventChunk.hasNext()) {
+            long currentTime = executionPlanContext.getTimestampGenerator().currentTime();
             StreamEvent streamEvent = streamEventChunk.next();
             StreamEvent clonedEvent = streamEventCloner.copyStreamEvent(streamEvent);
             clonedEvent.setType(StreamEvent.Type.EXPIRED);
 
-            meta_punctuation = Integer.valueOf ((attributeExpressionExecutors[1].execute(streamEvent)).toString());
+            meta_punctuation = Integer.valueOf((attributeExpressionExecutors[1].execute(streamEvent)).toString());
 
-            if (count < length) {
+
+            if (meta_punctuation == -1) {
+                StreamEvent firstEventExpired = expiredEventChunk.poll();
+
+                if (firstEventExpired != null) {
+                    firstEventExpired.setTimestamp(currentTime);
+                    streamEventChunk.insertBeforeCurrent(firstEventExpired);
+                }
+                streamEventChunk.insertBeforeCurrent(clonedEvent);
+            } else if (count < length) {
                 count++;
                 this.expiredEventChunk.add(clonedEvent);
             } else {
                 StreamEvent firstEvent = this.expiredEventChunk.poll();
                 if (firstEvent != null) {
+                    firstEvent.setTimestamp(currentTime);
                     streamEventChunk.insertBeforeCurrent(firstEvent);
                     this.expiredEventChunk.add(clonedEvent);
                 } else {
@@ -80,8 +92,10 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
                 }
             }
         }
+
         nextProcessor.process(streamEventChunk);
     }
+
 
     /**
      * To find events from the processor event pool, that the matches the matchingEvent based on finder logic.
@@ -111,7 +125,9 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
      * matchingEvent
      */
     @Override
-    public Finder constructFinder(Expression expression, MetaComplexEvent metaComplexEvent, ExecutionPlanContext executionPlanContext, List<VariableExpressionExecutor> variableExpressionExecutors, Map<String, EventTable> eventTableMap, int matchingStreamIndex, long withinTime) {
+    public Finder constructFinder(Expression expression, MetaComplexEvent metaComplexEvent, ExecutionPlanContext
+            executionPlanContext, List<VariableExpressionExecutor> variableExpressionExecutors, Map<String, EventTable> eventTableMap,
+                                  int matchingStreamIndex, long withinTime) {
         return CollectionOperatorParser.parse(expression, metaComplexEvent, executionPlanContext, variableExpressionExecutors, eventTableMap, matchingStreamIndex, inputDefinition, withinTime);
     }
 
@@ -144,7 +160,7 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
      */
     @Override
     public Object[] currentState() {
-        return new Object[]{expiredEventChunk, count};
+        return new Object[]{expiredEventChunk.getFirst(), count};
     }
 
     /**
@@ -156,7 +172,8 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
      */
     @Override
     public void restoreState(Object[] state) {
-        expiredEventChunk = (ComplexEventChunk<StreamEvent>) state[0];
+        expiredEventChunk.clear();
+        expiredEventChunk.add((StreamEvent) state[0]);
         count = (Integer) state[1];
     }
 }
