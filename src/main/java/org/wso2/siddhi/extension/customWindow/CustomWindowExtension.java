@@ -18,6 +18,7 @@ import org.wso2.siddhi.core.util.parser.CollectionOperatorParser;
 import org.wso2.siddhi.query.api.exception.ExecutionPlanValidationException;
 import org.wso2.siddhi.query.api.expression.Expression;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -25,11 +26,13 @@ import java.util.Map;
  * Custom Sliding Length Window implementation which holds last length events, and gets updated on every event arrival and expiry.
  */
 public class CustomWindowExtension extends WindowProcessor implements FindableProcessor {
-    private int length;
     private int meta_punctuation;
+    private int length;
     private int count = 0;
-    private ComplexEventChunk<StreamEvent> expiredEventChunk;
-    private ExpressionExecutor[] attributeExpressionExecutors;
+    private ComplexEventChunk<StreamEvent> currentEventChunk = new ComplexEventChunk<StreamEvent>();
+    private ComplexEventChunk<StreamEvent> expiredEventChunk = new ComplexEventChunk<StreamEvent>();
+    private ExecutionPlanContext executionPlanContext;
+
 
     /**
      * The init method of the WindowProcessor, this method will be called before other methods
@@ -39,14 +42,11 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
      */
     @Override
     protected void init(ExpressionExecutor[] attributeExpressionExecutors, ExecutionPlanContext executionPlanContext) {
-        this.attributeExpressionExecutors = attributeExpressionExecutors;
-        expiredEventChunk = new ComplexEventChunk<StreamEvent>();
+        this.executionPlanContext = executionPlanContext;
         if (attributeExpressionExecutors.length == 2) {
-            length = (Integer) ((ConstantExpressionExecutor) attributeExpressionExecutors[0]).getValue();
+            length = (Integer) (((ConstantExpressionExecutor) attributeExpressionExecutors[0]).getValue());
         } else {
-            throw new ExecutionPlanValidationException(
-                    "Length window should only have two parameter (<int> windowLength, <int> meta_punctuation), but found "
-                            + attributeExpressionExecutors.length + " input attributes");
+            throw new ExecutionPlanValidationException("Length batch window should only have one parameter (<int> meta_punctuation, <int> windowLength), but found " + attributeExpressionExecutors.length + " input attributes");
         }
     }
 
@@ -60,40 +60,41 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
     @Override
     protected synchronized void process(ComplexEventChunk<StreamEvent> streamEventChunk,
                                         Processor nextProcessor, StreamEventCloner streamEventCloner) {
-
         while (streamEventChunk.hasNext()) {
-            long currentTime = executionPlanContext.getTimestampGenerator().currentTime();
             StreamEvent streamEvent = streamEventChunk.next();
-            StreamEvent clonedEvent = streamEventCloner.copyStreamEvent(streamEvent);
-            clonedEvent.setType(StreamEvent.Type.EXPIRED);
-
+            StreamEvent clonedStreamEvent = streamEventCloner.copyStreamEvent(streamEvent);
+//            clonedStreamEvent.setExpired(true);
             meta_punctuation = Integer.valueOf((attributeExpressionExecutors[1].execute(streamEvent)).toString());
-
-
-            if (meta_punctuation == -1) {
-                StreamEvent firstEventExpired = expiredEventChunk.poll();
-
-                if (firstEventExpired != null) {
-                    firstEventExpired.setTimestamp(currentTime);
-                    streamEventChunk.insertBeforeCurrent(firstEventExpired);
+            currentEventChunk.add(clonedStreamEvent);
+            count++;
+            if (meta_punctuation == -1 || count == length) {
+                while (expiredEventChunk.hasNext()) {
+                    StreamEvent expiredEvent = expiredEventChunk.next();
+                    expiredEvent.setTimestamp(executionPlanContext.getTimestampGenerator().currentTime());
                 }
-                streamEventChunk.insertBeforeCurrent(clonedEvent);
-            } else if (count < length) {
-                count++;
-                this.expiredEventChunk.add(clonedEvent);
-            } else {
-                StreamEvent firstEvent = this.expiredEventChunk.poll();
-                if (firstEvent != null) {
-                    firstEvent.setTimestamp(currentTime);
-                    streamEventChunk.insertBeforeCurrent(firstEvent);
-                    this.expiredEventChunk.add(clonedEvent);
-                } else {
-                    streamEventChunk.insertBeforeCurrent(clonedEvent);
+                if (expiredEventChunk.getFirst() != null) {
+                    streamEventChunk.insertBeforeCurrent(expiredEventChunk.getFirst());
                 }
+                expiredEventChunk.clear();
+                while (currentEventChunk.hasNext()) {
+                    StreamEvent currentEvent = currentEventChunk.next();
+                    StreamEvent toExpireEvent = streamEventCloner.copyStreamEvent(currentEvent);
+                    toExpireEvent.setType(StreamEvent.Type.EXPIRED);
+                    expiredEventChunk.add(toExpireEvent);
+                }
+                streamEventChunk.insertBeforeCurrent(currentEventChunk.getFirst());
+                currentEventChunk.clear();
+                count = 0;
+
             }
+            streamEventChunk.remove();
+
+        }
+        if (streamEventChunk.getFirst() != null) {
+            nextProcessor.process(streamEventChunk);
         }
 
-        nextProcessor.process(streamEventChunk);
+
     }
 
 
