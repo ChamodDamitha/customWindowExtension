@@ -63,8 +63,12 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
         while (streamEventChunk.hasNext()) {
             StreamEvent streamEvent = streamEventChunk.next();
             StreamEvent clonedStreamEvent = streamEventCloner.copyStreamEvent(streamEvent);
-//            clonedStreamEvent.setExpired(true);
+
             meta_punctuation = Integer.valueOf((attributeExpressionExecutors[1].execute(streamEvent)).toString());
+            if (meta_punctuation == -1) {
+                clonedStreamEvent.setType(StreamEvent.Type.EXPIRED);
+                System.out.println(CustomWindowExtension.class.getSimpleName() + " : punctuation_received");//TODO : testing
+            }
             currentEventChunk.add(clonedStreamEvent);
             count++;
             if (meta_punctuation == -1 || count == length) {

@@ -32,7 +32,7 @@ public class CustomWindowExtensionTestCase {
 
         String inStreamDefinition = "define stream inputStream (meta_punctuation int, id int);";
         String query = ("@info(name = 'query1') " +
-                "from inputStream#window.custom:customWindow(5, meta_punctuation) " +
+                "from inputStream#window.custom:customLengthBatch(5, meta_punctuation) " +
                 "select sum(id) as sum " +
                 "insert events into outputStream;");
 
@@ -69,14 +69,14 @@ public class CustomWindowExtensionTestCase {
             inputHandler.send(new Object[]{1, 1});
             Thread.sleep(1);
         }
-        for (int i = 10; i < 15; i++) {
+        for (int i = 8; i < 13; i++) {
             inputHandler.send(new Object[]{-1, 1});
             Thread.sleep(100);
         }
         executionPlanRuntime.shutdown();
 
         Thread.sleep(2000);
-        Assert.assertEquals(7, count);
+        Assert.assertEquals(2, count);
 
     }
 

@@ -16,4 +16,4 @@
 # under the License.
 #
 
-customWindow=org.wso2.siddhi.extension.customWindow.CustomWindowExtension
+customLengthBatch=org.wso2.siddhi.extension.customWindow.CustomWindowExtension
