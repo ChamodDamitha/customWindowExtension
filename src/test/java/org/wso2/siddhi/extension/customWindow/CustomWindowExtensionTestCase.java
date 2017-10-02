@@ -6,11 +6,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.wso2.siddhi.core.ExecutionPlanRuntime;
 import org.wso2.siddhi.core.SiddhiManager;
-import org.wso2.siddhi.core.event.Event;
-import org.wso2.siddhi.core.query.output.callback.QueryCallback;
 import org.wso2.siddhi.core.stream.input.InputHandler;
 import org.wso2.siddhi.core.stream.output.StreamCallback;
-import org.wso2.siddhi.core.util.EventPrinter;
 
 public class CustomWindowExtensionTestCase {
     static final Logger log = Logger.getLogger(CustomWindowExtension.class);
@@ -33,8 +30,8 @@ public class CustomWindowExtensionTestCase {
         String inStreamDefinition = "define stream inputStream (meta_punctuation int, id int);";
         String query = ("@info(name = 'query1') " +
                 "from inputStream#window.custom:customLengthBatch(5, meta_punctuation) " +
-                "select sum(id) as sum " +
-                "insert events into outputStream;");
+                "select count(id) as sum " +
+                "insert into outputStream;");
 
         ExecutionPlanRuntime executionPlanRuntime = siddhiManager.createExecutionPlanRuntime(inStreamDefinition + query);
 
@@ -65,18 +62,20 @@ public class CustomWindowExtensionTestCase {
         InputHandler inputHandler = executionPlanRuntime.getInputHandler("inputStream");
         executionPlanRuntime.start();
 
-        for (int i = 0; i < 8; i++) {
+        for (int i = 0; i < 20; i++) {
             inputHandler.send(new Object[]{1, 1});
             Thread.sleep(1);
         }
-        for (int i = 8; i < 13; i++) {
-            inputHandler.send(new Object[]{-1, 1});
-            Thread.sleep(100);
-        }
+
+//        inputHandler.send(new Object[]{-1, 1});
+//        for (int i = 8; i < 13; i++) {
+//            inputHandler.send(new Object[]{-1, 1});
+//            Thread.sleep(100);
+//        }
         executionPlanRuntime.shutdown();
 
         Thread.sleep(2000);
-        Assert.assertEquals(2, count);
+        Assert.assertEquals(4, count);
 
     }
 
