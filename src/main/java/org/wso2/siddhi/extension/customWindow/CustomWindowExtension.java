@@ -30,6 +30,12 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
     private int length;
     private int count = 0;
     private int meta_punctuation;
+    private long meta_timestamp;
+
+    private boolean toExpire = false;
+
+    private ArrayList<Long> punctuation_timestamps;
+
     private ComplexEventChunk<StreamEvent> currentEventChunk = new ComplexEventChunk<StreamEvent>(false);
     private ComplexEventChunk<StreamEvent> expiredEventChunk = null;
     private ExecutionPlanContext executionPlanContext;
@@ -48,13 +54,15 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
         if (outputExpectsExpiredEvents) {
             expiredEventChunk = new ComplexEventChunk<StreamEvent>(false);
         }
-        if (attributeExpressionExecutors.length == 2) {
+        if (attributeExpressionExecutors.length == 3) {
             length = (Integer) (((ConstantExpressionExecutor) attributeExpressionExecutors[0]).getValue());
         } else {
-            throw new ExecutionPlanValidationException("Length batch window should only have two parameters" +
-                    " (<int> windowLength, <int> punctuation), but found " + attributeExpressionExecutors.length +
+            throw new ExecutionPlanValidationException("Length batch window should exactly have three parameters" +
+                    " (<int> windowLength, <int> punctuation, <long> timestamp), but found " + attributeExpressionExecutors.length +
                     " input attributes");
         }
+
+        punctuation_timestamps = new ArrayList<Long>();
     }
 
     /**
@@ -76,11 +84,28 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
                 StreamEvent clonedStreamEvent = streamEventCloner.copyStreamEvent(streamEvent);
 
                 meta_punctuation = (Integer) (attributeExpressionExecutors[1].execute(streamEvent));
+                meta_timestamp = (Long) (attributeExpressionExecutors[2].execute(streamEvent));
+
                 if (meta_punctuation != -1) {
                     currentEventChunk.add(clonedStreamEvent);
                     count++;
                 }
-                if (meta_punctuation == -1 || count == length) {
+
+//              Adding the punctuation
+                if (meta_punctuation == -1) {
+                    punctuation_timestamps.add(meta_timestamp);
+                }
+
+
+                if ((punctuation_timestamps.size() > 0 && meta_timestamp >= punctuation_timestamps.get(0))) {
+                    punctuation_timestamps.remove(0);
+                    toExpire = true;
+                } else if (count == length) {
+                    toExpire = true;
+                }
+
+                if (toExpire) {
+                    System.out.println("count : " + count);//TODO : testing.....
                     if (outputExpectsExpiredEvents) {
                         if (expiredEventChunk.getFirst() != null) {
                             while (expiredEventChunk.hasNext()) {
@@ -119,6 +144,7 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
                     if (outputStreamEventChunk.getFirst() != null) {
                         streamEventChunks.add(outputStreamEventChunk);
                     }
+                    toExpire = false;
                 }
             }
         }
