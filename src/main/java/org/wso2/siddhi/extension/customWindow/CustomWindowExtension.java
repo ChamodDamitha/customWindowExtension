@@ -1,5 +1,6 @@
 package org.wso2.siddhi.extension.customWindow;
 
+import com.mchange.util.AssertException;
 import org.wso2.siddhi.core.config.ExecutionPlanContext;
 import org.wso2.siddhi.core.event.ComplexEvent;
 import org.wso2.siddhi.core.event.ComplexEventChunk;
@@ -30,8 +31,8 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
     private int length;
     private int count = 0;
     private int meta_punctuation;
+    private int id;
     private long meta_timestamp;
-
     private boolean toExpire = false;
 
     private ArrayList<Long> punctuation_timestamps;
@@ -54,11 +55,11 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
         if (outputExpectsExpiredEvents) {
             expiredEventChunk = new ComplexEventChunk<StreamEvent>(false);
         }
-        if (attributeExpressionExecutors.length == 3) {
+        if (attributeExpressionExecutors.length == 4) {
             length = (Integer) (((ConstantExpressionExecutor) attributeExpressionExecutors[0]).getValue());
         } else {
             throw new ExecutionPlanValidationException("Length batch window should exactly have three parameters" +
-                    " (<int> windowLength, <int> punctuation, <long> timestamp), but found " + attributeExpressionExecutors.length +
+                    " (<int> windowLength, <int> punctuation, <long> timestamp, <int> id), but found " + attributeExpressionExecutors.length +
                     " input attributes");
         }
 
@@ -85,24 +86,36 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
 
                 meta_punctuation = (Integer) (attributeExpressionExecutors[1].execute(streamEvent));
                 meta_timestamp = (Long) (attributeExpressionExecutors[2].execute(streamEvent));
-
-                if (meta_punctuation != -1) {
-                    currentEventChunk.add(clonedStreamEvent);
-                    count++;
-                }
+                id = (Integer) (attributeExpressionExecutors[3].execute(streamEvent));
 
 //              Adding the punctuation
                 if (meta_punctuation == -1) {
                     punctuation_timestamps.add(meta_timestamp);
+
+//                    System.out.println("punctuation_timestamp : " + meta_timestamp);//TODO : testing
+                }
+
+                else if (meta_punctuation != -1) {
+                    currentEventChunk.add(clonedStreamEvent);
+                    count++;
+//                    System.out.println("data_timestamp : " + meta_timestamp + ", id : " + id);//TODO : testing
+
+
+                    if ((punctuation_timestamps.size() > 0 && meta_timestamp >= punctuation_timestamps.get(0))) {
+//                        System.out.println("punctuation_timestamps.get(0) : " + punctuation_timestamps.get(0));//TODO : testing
+//                        System.out.println("meta_timestamp : " + meta_timestamp);//TODO : testing
+                        punctuation_timestamps.remove(0);
+                        toExpire = true;
+
+                    } else if (count == length) {
+                        toExpire = true;
+                    }
                 }
 
 
-                if ((punctuation_timestamps.size() > 0 && meta_timestamp >= punctuation_timestamps.get(0))) {
-                    punctuation_timestamps.remove(0);
-                    toExpire = true;
-                } else if (count == length) {
-                    toExpire = true;
-                }
+
+
+
 
                 if (toExpire) {
                     System.out.println("count : " + count);//TODO : testing.....
