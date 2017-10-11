@@ -66,7 +66,7 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
                     " input attributes");
         }
 
-        listHandler = new ListHandler(attributeExpressionExecutors);
+        listHandler = new ListHandler(length, attributeExpressionExecutors);
     }
 
     /**
