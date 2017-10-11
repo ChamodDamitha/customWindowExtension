@@ -21,6 +21,7 @@ import org.wso2.siddhi.query.api.exception.ExecutionPlanValidationException;
 import org.wso2.siddhi.query.api.expression.Expression;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -35,13 +36,15 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
     private long meta_timestamp;
     private boolean toExpire = false;
 
-    private ArrayList<Long> punctuation_timestamps;
 
     private ComplexEventChunk<StreamEvent> currentEventChunk = new ComplexEventChunk<StreamEvent>(false);
     private ComplexEventChunk<StreamEvent> expiredEventChunk = null;
     private ExecutionPlanContext executionPlanContext;
     private StreamEvent resetEvent = null;
 
+
+    ListHandler listHandler;
+    SortedList sortedEventList;
 
     /**
      * The init method of the WindowProcessor, this method will be called before other methods
@@ -63,7 +66,7 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
                     " input attributes");
         }
 
-        punctuation_timestamps = new ArrayList<Long>();
+        listHandler = new ListHandler(attributeExpressionExecutors);
     }
 
     /**
@@ -89,32 +92,25 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
                 id = (Integer) (attributeExpressionExecutors[3].execute(streamEvent));
 
 //              Adding the punctuation
-                if (meta_punctuation == -1) {
-                    punctuation_timestamps.add(meta_timestamp);
-
+                if (meta_punctuation > 0) {
+                    listHandler.addNewList(meta_timestamp, meta_punctuation);
 //                    System.out.println("punctuation_timestamp : " + meta_timestamp);//TODO : testing
                 }
 
-                else if (meta_punctuation != -1) {
-                    currentEventChunk.add(clonedStreamEvent);
-                    count++;
-//                    System.out.println("data_timestamp : " + meta_timestamp + ", id : " + id);//TODO : testing
-
-
-                    if ((punctuation_timestamps.size() > 0 && meta_timestamp >= punctuation_timestamps.get(0))) {
-//                        System.out.println("punctuation_timestamps.get(0) : " + punctuation_timestamps.get(0));//TODO : testing
-//                        System.out.println("meta_timestamp : " + meta_timestamp);//TODO : testing
-                        punctuation_timestamps.remove(0);
-                        toExpire = true;
-
-                    } else if (count == length) {
+//              Adding a normal event
+                else if (meta_punctuation < 0) {
+                    sortedEventList = listHandler.addEvent(clonedStreamEvent);
+//                    System.out.println("normal event received");//TODO : testing
+                    if (sortedEventList != null) {
+                        Iterator iterator = sortedEventList.iterator();
+                        count = 0;
+                        while (iterator.hasNext()) {
+                            currentEventChunk.add((StreamEvent) iterator.next());
+                            count++;
+                        }
                         toExpire = true;
                     }
                 }
-
-
-
-
 
 
                 if (toExpire) {
@@ -153,7 +149,6 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
                         outputStreamEventChunk.add(currentEventChunk.getFirst());
                     }
                     currentEventChunk.clear();
-                    count = 0;
                     if (outputStreamEventChunk.getFirst() != null) {
                         streamEventChunks.add(outputStreamEventChunk);
                     }
