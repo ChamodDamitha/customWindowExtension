@@ -39,40 +39,32 @@ public class ListHandler {
 //        System.out.println("tempEventList size : " + tempEventList.size());//TODO
 
 //      no punctuations
-        if (eventLists.isEmpty() && tempEventList.size() == windowSize) {
-            SortedList<StreamEvent> returnList = tempEventList;
-            tempEventList = new SortedList<StreamEvent>(new Comparator<StreamEvent>() {
-                @Override
-                public int compare(StreamEvent o1, StreamEvent o2) {
-                    long timestamp1 = (Long) (attributeExpressionExecutors[2].execute(o1));
-                    long timestamp2 = (Long) (attributeExpressionExecutors[2].execute(o2));
-
-                    return (int) (timestamp1 - timestamp2);
-                }
-            });
-            return returnList;
-        }
+//        if (eventLists.isEmpty() && tempEventList.size() == windowSize) {
+//            SortedList<StreamEvent> returnList = tempEventList;
+//            tempEventList = new SortedList<StreamEvent>(new Comparator<StreamEvent>() {
+//                @Override
+//                public int compare(StreamEvent o1, StreamEvent o2) {
+//                    long timestamp1 = (Long) (attributeExpressionExecutors[2].execute(o1));
+//                    long timestamp2 = (Long) (attributeExpressionExecutors[2].execute(o2));
+//
+//                    return (int) (timestamp1 - timestamp2);
+//                }
+//            });
+//            return returnList;
+//        }
 
 //      have punctuations
         for (int i = 0; i < tempEventList.size(); i++) {
             StreamEvent tempStreamEvent = tempEventList.get(i);
             long event_timestamp = (Long) (attributeExpressionExecutors[2].execute(tempStreamEvent));
-            boolean added = false;
 
             for (EventList eventList : eventLists) {
                 if (eventList.getPunctuation_timestamp() >= event_timestamp) {
                     eventList.add(tempStreamEvent);
                     tempEventList.remove(i);
-                    i--;
-                    added = true;
                     break;
                 }
             }
-
-//            if (!added) {
-//                System.out.println("not added...............................!");//TODO
-//            }
-
         }
 
         if (!eventLists.isEmpty()) {

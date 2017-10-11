@@ -32,7 +32,6 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
     private int length;
     private int count = 0;
     private int meta_punctuation;
-    private int id;
     private long meta_timestamp;
     private boolean toExpire = false;
 
@@ -58,11 +57,11 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
         if (outputExpectsExpiredEvents) {
             expiredEventChunk = new ComplexEventChunk<StreamEvent>(false);
         }
-        if (attributeExpressionExecutors.length == 4) {
+        if (attributeExpressionExecutors.length == 3) {
             length = (Integer) (((ConstantExpressionExecutor) attributeExpressionExecutors[0]).getValue());
         } else {
             throw new ExecutionPlanValidationException("Length batch window should exactly have three parameters" +
-                    " (<int> windowLength, <int> punctuation, <long> timestamp, <int> id), but found " + attributeExpressionExecutors.length +
+                    " (<int> windowLength, <int> punctuation, <long> timestamp), but found " + attributeExpressionExecutors.length +
                     " input attributes");
         }
 
@@ -89,7 +88,6 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
 
                 meta_punctuation = (Integer) (attributeExpressionExecutors[1].execute(streamEvent));
                 meta_timestamp = (Long) (attributeExpressionExecutors[2].execute(streamEvent));
-                id = (Integer) (attributeExpressionExecutors[3].execute(streamEvent));
 
 //              Adding the punctuation
                 if (meta_punctuation > 0) {
