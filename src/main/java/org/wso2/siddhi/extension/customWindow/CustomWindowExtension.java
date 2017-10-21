@@ -1,6 +1,5 @@
 package org.wso2.siddhi.extension.customWindow;
 
-import com.mchange.util.AssertException;
 import org.wso2.siddhi.core.config.ExecutionPlanContext;
 import org.wso2.siddhi.core.event.ComplexEvent;
 import org.wso2.siddhi.core.event.ComplexEventChunk;
@@ -32,7 +31,7 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
     private int length;
     private int count = 0;
     private int meta_punctuation;
-    private long meta_timestamp;
+    private int meta_counter;
     private boolean toExpire = false;
 
 
@@ -43,7 +42,9 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
 
 
     ListHandler listHandler;
-    SortedList sortedEventList;
+    //    SortedList sortedEventLists;
+    ArrayList<SortedList<StreamEvent>> sortedEventLists;
+
 
     /**
      * The init method of the WindowProcessor, this method will be called before other methods
@@ -61,7 +62,7 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
             length = (Integer) (((ConstantExpressionExecutor) attributeExpressionExecutors[0]).getValue());
         } else {
             throw new ExecutionPlanValidationException("Length batch window should exactly have three parameters" +
-                    " (<int> windowLength, <int> punctuation, <long> timestamp), but found " + attributeExpressionExecutors.length +
+                    " (<int> windowLength, <int> punctuation, <long> counter), but found " + attributeExpressionExecutors.length +
                     " input attributes");
         }
 
@@ -87,76 +88,87 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
                 StreamEvent clonedStreamEvent = streamEventCloner.copyStreamEvent(streamEvent);
 
                 meta_punctuation = (Integer) (attributeExpressionExecutors[1].execute(streamEvent));
-                meta_timestamp = (Long) (attributeExpressionExecutors[2].execute(streamEvent));
+                meta_counter = (Integer) (attributeExpressionExecutors[2].execute(streamEvent));
 
 //              Adding the punctuation
-                if (meta_punctuation > 0) {
-                    listHandler.addNewList(meta_timestamp, meta_punctuation);
-//                    System.out.println("punctuation_timestamp : " + meta_timestamp);//TODO : testing
+                if (meta_punctuation >= 0) {
+                    listHandler.addNewList(meta_counter, meta_punctuation);
                 }
 
 //              Adding a normal event
                 else if (meta_punctuation < 0) {
-                    sortedEventList = listHandler.addEvent(clonedStreamEvent);
+                    sortedEventLists = listHandler.addEvent(clonedStreamEvent);
 //                    System.out.println("normal event received");//TODO : testing
-                    if (sortedEventList != null) {
-                        Iterator iterator = sortedEventList.iterator();
-                        count = 0;
-                        while (iterator.hasNext()) {
-                            currentEventChunk.add((StreamEvent) iterator.next());
-                            count++;
-                        }
-                        toExpire = true;
-                    }
-                }
+                    if (!sortedEventLists.isEmpty()) {
 
+                        for (SortedList<StreamEvent> eventSortedList : sortedEventLists) {
+                            outputStreamEventChunk = new ComplexEventChunk<StreamEvent>(true);
 
-                if (toExpire) {
-                    System.out.println("count : " + count);//TODO : testing.....
-                    if (outputExpectsExpiredEvents) {
-                        if (expiredEventChunk.getFirst() != null) {
-                            while (expiredEventChunk.hasNext()) {
-                                StreamEvent expiredEvent = expiredEventChunk.next();
-                                expiredEvent.setTimestamp(currentTime);
+                            Iterator iterator = eventSortedList.iterator();
+                            count = 0;
+                            while (iterator.hasNext()) {
+                                currentEventChunk.add((StreamEvent) iterator.next());
+                                count++;
                             }
-                            outputStreamEventChunk.add(expiredEventChunk.getFirst());
-                        }
-                    }
-                    if (expiredEventChunk != null) {
-                        expiredEventChunk.clear();
-                    }
+                            toExpire = true;
 
-                    if (currentEventChunk.getFirst() != null) {
 
-                        // add reset event in front of current events
-                        outputStreamEventChunk.add(resetEvent);
-                        resetEvent = null;
+                            if (toExpire) {
+                                System.out.println("count : " + count);//TODO : testing.....
+                                if (outputExpectsExpiredEvents) {
+                                    if (expiredEventChunk.getFirst() != null) {
+                                        while (expiredEventChunk.hasNext()) {
+                                            StreamEvent expiredEvent = expiredEventChunk.next();
+                                            expiredEvent.setTimestamp(currentTime);
+                                        }
+                                        outputStreamEventChunk.add(expiredEventChunk.getFirst());
+                                    }
+                                }
+                                if (expiredEventChunk != null) {
+                                    expiredEventChunk.clear();
+                                }
 
-                        if (expiredEventChunk != null) {
-                            currentEventChunk.reset();
-                            while (currentEventChunk.hasNext()) {
-                                StreamEvent currentEvent = currentEventChunk.next();
-                                StreamEvent toExpireEvent = streamEventCloner.copyStreamEvent(currentEvent);
-                                toExpireEvent.setType(StreamEvent.Type.EXPIRED);
-                                expiredEventChunk.add(toExpireEvent);
+                                if (currentEventChunk.getFirst() != null) {
+
+                                    // add reset event in front of current events
+                                    outputStreamEventChunk.add(resetEvent);
+                                    resetEvent = null;
+
+                                    if (expiredEventChunk != null) {
+                                        currentEventChunk.reset();
+                                        while (currentEventChunk.hasNext()) {
+                                            StreamEvent currentEvent = currentEventChunk.next();
+                                            StreamEvent toExpireEvent = streamEventCloner.copyStreamEvent(currentEvent);
+                                            toExpireEvent.setType(StreamEvent.Type.EXPIRED);
+                                            expiredEventChunk.add(toExpireEvent);
+                                        }
+                                    }
+
+                                    resetEvent = streamEventCloner.copyStreamEvent(currentEventChunk.getFirst());
+                                    resetEvent.setType(ComplexEvent.Type.RESET);
+                                    outputStreamEventChunk.add(currentEventChunk.getFirst());
+                                }
+
+
+                                currentEventChunk.clear();
+                                if (outputStreamEventChunk.getFirst() != null) {
+                                    streamEventChunks.add(outputStreamEventChunk);
+                                }
+                                toExpire = false;
                             }
                         }
+                    }
 
-                        resetEvent = streamEventCloner.copyStreamEvent(currentEventChunk.getFirst());
-                        resetEvent.setType(ComplexEvent.Type.RESET);
-                        outputStreamEventChunk.add(currentEventChunk.getFirst());
-                    }
-                    currentEventChunk.clear();
-                    if (outputStreamEventChunk.getFirst() != null) {
-                        streamEventChunks.add(outputStreamEventChunk);
-                    }
-                    toExpire = false;
+
                 }
             }
         }
+
         for (ComplexEventChunk<StreamEvent> outputStreamEventChunk : streamEventChunks) {
             nextProcessor.process(outputStreamEventChunk);
         }
+
+
     }
 
     @Override
@@ -195,6 +207,7 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
             resetEvent = (StreamEvent) state[2];
         }
     }
+
     @Override
     public synchronized StreamEvent find(StateEvent matchingEvent, Finder finder) {
         return finder.find(matchingEvent, expiredEventChunk, streamEventCloner);
@@ -206,7 +219,7 @@ public class CustomWindowExtension extends WindowProcessor implements FindablePr
         if (expiredEventChunk == null) {
             expiredEventChunk = new ComplexEventChunk<StreamEvent>(false);
         }
-        return OperatorParser.constructOperator(expiredEventChunk, expression, matchingMetaStateHolder,executionPlanContext,variableExpressionExecutors,eventTableMap);
+        return OperatorParser.constructOperator(expiredEventChunk, expression, matchingMetaStateHolder, executionPlanContext, variableExpressionExecutors, eventTableMap);
     }
 
 }

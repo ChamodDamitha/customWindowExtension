@@ -7,26 +7,30 @@ import java.util.Comparator;
 
 public class EventList {
     private SortedList<StreamEvent> streamEvents;
-    private long punctuation_timestamp;
+    private int punctuation_counter;
     private int limitSize;
     private int currentSize;
     private boolean isFilled;
 
-    public EventList(int limitSize, long punctuation_timestamp, final ExpressionExecutor[] attributeExpressionExecutors) {
+    public EventList(int limitSize, int punctuation_counter, final ExpressionExecutor[] attributeExpressionExecutors) {
         this.streamEvents = new SortedList<StreamEvent>(new Comparator<StreamEvent>() {
             @Override
             public int compare(StreamEvent o1, StreamEvent o2) {
-                long timestamp1 = (Long) (attributeExpressionExecutors[2].execute(o1));
-                long timestamp2 = (Long) (attributeExpressionExecutors[2].execute(o2));
+                int counter1 = (Integer) (attributeExpressionExecutors[2].execute(o1));
+                int counter2 = (Integer) (attributeExpressionExecutors[2].execute(o2));
 
-                return (int) (timestamp1 - timestamp2);
+                return (counter1 - counter2);
             }
         });
 
         this.currentSize = 0;
         this.limitSize = limitSize;
-        this.punctuation_timestamp = punctuation_timestamp;
-        this.isFilled = false;
+        this.punctuation_counter = punctuation_counter;
+        if (limitSize == 0) {
+            this.isFilled = true;
+        } else {
+            this.isFilled = false;
+        }
     }
 
     public boolean add(StreamEvent streamEvent) {
@@ -45,8 +49,8 @@ public class EventList {
         return streamEvents;
     }
 
-    public long getPunctuation_timestamp() {
-        return punctuation_timestamp;
+    public int getPunctuation_counter() {
+        return punctuation_counter;
     }
 
     public int getLimitSize() {
